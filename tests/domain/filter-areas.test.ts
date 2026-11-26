@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { filterAreas, indexAreas, validThreshold } from '../../src/domain/filterAreas'
+import {
+  createBuiltInFilterPresets, filterAreas, indexAreas, parseFilterPresets, validFilterPredicate, validThreshold,
+} from '../../src/domain/filterAreas'
 import type { FilterPredicate } from '../../src/domain/filterAreas'
 import type { GeoUnit, Indicator } from '../../src/types/snapshot'
 
@@ -86,5 +88,78 @@ describe('numeric area filters', () => {
     expect(validThreshold(online, 100.1)).toBe(false)
     expect(validThreshold(online, Infinity)).toBe(false)
     expect(validThreshold(online, 0)).toBe(true)
+  })
+
+  it('matches inclusive between bounds and validates both thresholds', () => {
+    const result = filterAreas(index, {
+      ...defaults,
+      scope: 'ward',
+      predicates: [{ code: 'population', operator: 'between', threshold: 30_000, upperThreshold: 32_000 }],
+    })
+    expect(result.byGeoId.get('W00004')?.status).toBe('matched')
+    expect(result.byGeoId.get('W26740')?.status).toBe('matched')
+    expect(result.byGeoId.get('W00070')?.status).toBe('failed')
+    const population = indicators.find(indicator => indicator.code === 'population')!
+    const online = indicators.find(indicator => indicator.code === 'online')!
+    expect(validFilterPredicate(population, { code: 'population', operator: 'between', threshold: 1, upperThreshold: 2 })).toBe(true)
+    expect(validFilterPredicate(population, { code: 'population', operator: 'between', threshold: 2, upperThreshold: 1 })).toBe(false)
+    expect(validFilterPredicate(online, { code: 'online', operator: 'between', threshold: 0, upperThreshold: 101 })).toBe(false)
+    expect(validFilterPredicate(population, { code: 'population', operator: 'between', threshold: 1 })).toBe(false)
+  })
+
+  it('uses three-valued AND, OR, and NOT logic with missing values', () => {
+    const getValue = (id: string, code: string) => {
+      if (code === 'unmet') return id === 'W26740' ? null : id === 'W00004' ? 50 : 25
+      if (code === 'poi_density') return id === 'W26740' ? null : id === 'W00004' ? 2 : 4
+      return null
+    }
+    const predicates: FilterPredicate[] = [
+      { code: 'unmet', operator: 'gte', threshold: 50 },
+      { code: 'poi_density', operator: 'lte', threshold: 2 },
+    ]
+    const any = filterAreas(index, { ...defaults, scope: 'ward', predicates, logic: 'any', getValue })
+    expect(any.byGeoId.get('W00004')?.status).toBe('matched')
+    expect(any.byGeoId.get('W00070')?.status).toBe('failed')
+    expect(any.byGeoId.get('W26740')?.status).toBe('missing')
+    expect(any.byGeoId.get('W26740')?.missing).toEqual([0, 1])
+
+    const negated = filterAreas(index, {
+      ...defaults, scope: 'ward', predicates: [{ code: 'unmet', operator: 'gte', threshold: 50, negate: true }],
+      getValue,
+    })
+    expect(negated.byGeoId.get('W00004')?.status).toBe('failed')
+    expect(negated.byGeoId.get('W00070')?.status).toBe('matched')
+
+    const falseAndMissing = filterAreas(index, {
+      ...defaults, scope: 'ward', predicates, logic: 'all',
+      getValue: (id, code) => id === 'W26740' ? code === 'unmet' ? null : 4 : getValue(id, code),
+    })
+    expect(falseAndMissing.byGeoId.get('W26740')).toMatchObject({ status: 'failed', missing: [0] })
+  })
+
+  it('creates median-based built-ins and rejects invalid stored preset conditions', () => {
+    const builtIns = createBuiltInFilterPresets(indicators, new Map([
+      ['unmet', [20, 40, 60]],
+      ['poi_density', [1, 3, 5]],
+      ['spending', [100, 200, 300]],
+    ]))
+    expect(builtIns).toMatchObject([
+      {
+        name: 'Nhu cầu cao, đối thủ thấp',
+        predicates: [
+          { code: 'unmet', operator: 'gte', threshold: 40 },
+          { code: 'poi_density', operator: 'lte', threshold: 3 },
+        ],
+      },
+      { name: 'Sức mua cao', predicates: [{ code: 'spending', operator: 'gte', threshold: 200 }] },
+    ])
+    expect(parseFilterPresets(JSON.stringify([{
+      id: 'my-filter', name: 'Khoảng dân số', logic: 'all',
+      predicates: [{ code: 'population', operator: 'between', threshold: 10, upperThreshold: 20 }],
+    }]), indicators)).toHaveLength(1)
+    expect(parseFilterPresets(JSON.stringify([{
+      id: 'bad-filter', name: 'Sai ngưỡng', logic: 'any',
+      predicates: [{ code: 'online', operator: 'between', threshold: 0, upperThreshold: 101 }],
+    }]), indicators)).toEqual([])
   })
 })

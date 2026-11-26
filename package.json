@@ -9,11 +9,13 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "typecheck": "tsc -b",
-    "test": "vitest run tests/domain",
+    "test": "vitest run tests/domain tests/components",
     "test:e2e": "playwright test"
   },
   "dependencies": {
     "chart.js": "^4.6.2",
+    "fflate": "^0.8.3",
+    "html-to-image": "^1.11.13",
     "leaflet": "^1.9.4",
     "lucide-react": "^1.80.0",
     "react": "^19.3.1",
@@ -24,6 +26,7 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.14.1",
     "@playwright/test": "^1.65.1",
     "@tailwindcss/vite": "^4.3.5",
     "@testing-library/jest-dom": "^8.0.0",

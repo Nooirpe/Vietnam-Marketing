@@ -1,8 +1,9 @@
 import type { GeoUnit, Indicator } from '../types/snapshot'
 import { foldVietnamese } from '../utils/foldVietnamese'
 
-const operators = ['gt', 'gte', 'lt', 'lte', 'eq'] as const
+const operators = ['gt', 'gte', 'lt', 'lte', 'eq', 'between'] as const
 export type FilterOperator = typeof operators[number]
+export type FilterLogic = 'all' | 'any'
 export type SearchScope = 'auto' | 'province' | 'ward' | 'local'
 export type ResultStatus = 'matched' | 'failed' | 'missing'
 
@@ -10,6 +11,15 @@ export interface FilterPredicate {
   code: string
   operator: FilterOperator
   threshold: number
+  upperThreshold?: number
+  negate?: boolean
+}
+
+export interface FilterPreset {
+  id: string
+  name: string
+  logic: FilterLogic
+  predicates: FilterPredicate[]
 }
 
 interface IndexedArea {
@@ -32,7 +42,7 @@ export interface AreaFilterResults {
   counts: Record<ResultStatus, number>
 }
 
-const compare: Record<FilterOperator, (value: number, threshold: number) => boolean> = {
+const compare: Record<Exclude<FilterOperator, 'between'>, (value: number, threshold: number) => boolean> = {
   gt: (value, threshold) => value > threshold,
   gte: (value, threshold) => value >= threshold,
   lt: (value, threshold) => value < threshold,
@@ -53,6 +63,92 @@ export function validThreshold(indicator: Indicator, threshold: number): boolean
     && threshold >= 0
     && (indicator.unit !== 'percent' || threshold <= 100)
     && (indicator.code !== 'population' || Number.isInteger(threshold))
+}
+
+export function validFilterPredicate(indicator: Indicator, predicate: FilterPredicate): boolean {
+  if (!validThreshold(indicator, predicate.threshold)) return false
+  if (predicate.operator === 'between') {
+    return typeof predicate.upperThreshold === 'number'
+      && validThreshold(indicator, predicate.upperThreshold)
+      && predicate.threshold <= predicate.upperThreshold
+  }
+  return predicate.upperThreshold === undefined
+}
+
+export function createBuiltInFilterPresets(
+  indicators: readonly Indicator[],
+  valuesByCode: ReadonlyMap<string, readonly number[]>,
+): FilterPreset[] {
+  function median(code: string): number | undefined {
+    const values = valuesByCode.get(code)?.filter(Number.isFinite).slice().sort((a, b) => a - b)
+    if (!values?.length) return undefined
+    const middle = Math.floor(values.length / 2)
+    return values.length % 2 ? values[middle] : (values[middle - 1] + values[middle]) / 2
+  }
+
+  const unmet = median('unmet')
+  const opponents = median('poi_density')
+  const spending = median('spending')
+  const presets: FilterPreset[] = []
+  if (unmet !== undefined && opponents !== undefined) {
+    presets.push({
+      id: 'builtin-demand-opportunity',
+      name: 'Nhu cầu cao, đối thủ thấp',
+      logic: 'all',
+      predicates: [
+        { code: 'unmet', operator: 'gte', threshold: unmet },
+        { code: 'poi_density', operator: 'lte', threshold: opponents },
+      ],
+    })
+  }
+  if (spending !== undefined) {
+    presets.push({
+      id: 'builtin-high-spending',
+      name: 'Sức mua cao',
+      logic: 'all',
+      predicates: [{ code: 'spending', operator: 'gte', threshold: spending }],
+    })
+  }
+  const availableCodes = new Set(indicators.map(indicator => indicator.code))
+  return presets.filter(preset => preset.predicates.every(predicate => {
+    const indicator = indicators.find(item => item.code === predicate.code)
+    return availableCodes.has(predicate.code) && !!indicator && validFilterPredicate(indicator, predicate)
+  }))
+}
+
+export function parseFilterPresets(value: string, indicators: readonly Indicator[]): FilterPreset[] {
+  try {
+    const parsed: unknown = JSON.parse(value)
+    if (!Array.isArray(parsed)) return []
+    return parsed.flatMap((item): FilterPreset[] => {
+      if (!item || typeof item !== 'object') return []
+      const preset = item as Record<string, unknown>
+      if (typeof preset.id !== 'string' || typeof preset.name !== 'string' ||
+          !preset.name.trim() || preset.name.length > 80 ||
+          (preset.logic !== 'all' && preset.logic !== 'any') || !Array.isArray(preset.predicates)) return []
+      const predicates = preset.predicates.flatMap((value): FilterPredicate[] => {
+        if (!value || typeof value !== 'object') return []
+        const candidate = value as Record<string, unknown>
+        if (typeof candidate.code !== 'string' || typeof candidate.threshold !== 'number' ||
+            !isFilterOperator(candidate.operator) ||
+            (candidate.negate !== undefined && typeof candidate.negate !== 'boolean') ||
+            (candidate.upperThreshold !== undefined && typeof candidate.upperThreshold !== 'number')) return []
+        const predicate: FilterPredicate = {
+          code: candidate.code,
+          operator: candidate.operator,
+          threshold: candidate.threshold,
+          ...(candidate.upperThreshold === undefined ? {} : { upperThreshold: candidate.upperThreshold }),
+          ...(candidate.negate === undefined ? {} : { negate: candidate.negate }),
+        }
+        const indicator = indicators.find(item => item.code === predicate.code)
+        return indicator && validFilterPredicate(indicator, predicate) ? [predicate] : []
+      })
+      if (predicates.length !== preset.predicates.length) return []
+      return [{ id: preset.id, name: preset.name.trim(), logic: preset.logic, predicates }]
+    })
+  } catch {
+    return []
+  }
 }
 
 export function indexAreas(areas: readonly GeoUnit[]): IndexedArea[] {
@@ -96,20 +192,29 @@ function searchPriority(indexed: IndexedArea, query: string): number | null {
 function evaluate(
   indexed: IndexedArea,
   predicates: readonly FilterPredicate[],
+  logic: FilterLogic,
   getValue: (geoId: string, code: string) => unknown,
 ): AreaFilterResult {
   const missing: number[] = []
-  let failed = false
+  const outcomes: (boolean | null)[] = []
   predicates.forEach(({ code, operator, threshold }, index) => {
     const value = getValue(indexed.area.id, code)
     if (typeof value !== 'number' || !Number.isFinite(value)) {
       missing.push(index)
-    } else if (!compare[operator](value, threshold)) {
-      failed = true
+      outcomes.push(null)
+    } else {
+      const outcome = operator === 'between'
+        ? value >= threshold && value <= (predicates[index].upperThreshold ?? Number.NaN)
+        : compare[operator](value, threshold)
+      outcomes.push(predicates[index].negate ? !outcome : outcome)
     }
   })
-  // A known false condition determines the result even if another value is absent.
-  return { area: indexed.area, parent: indexed.parent, status: failed ? 'failed' : missing.length ? 'missing' : 'matched', missing }
+  const failed = logic === 'all' ? outcomes.includes(false) : outcomes.length > 0 && outcomes.every(value => value === false)
+  const matched = logic === 'all'
+    ? outcomes.every(value => value === true)
+    : outcomes.includes(true)
+  const status = predicates.length === 0 || matched ? 'matched' : failed ? 'failed' : 'missing'
+  return { area: indexed.area, parent: indexed.parent, status, missing }
 }
 
 const names = new Intl.Collator('vi')
@@ -121,10 +226,12 @@ export function filterAreas(
     provinceId: string | null
     query: string
     predicates: readonly FilterPredicate[]
+    logic?: FilterLogic
     getValue: (geoId: string, code: string) => unknown
   },
 ): AreaFilterResults {
   const { scope, provinceId, predicates, getValue } = options
+  const logic = options.logic ?? 'all'
   // An active numeric filter uses one administrative level even during free-text search.
   const query = foldVietnamese(options.query)
   const scopeQuery = predicates.length ? '' : query
@@ -141,7 +248,7 @@ export function filterAreas(
   )
   const counts: AreaFilterResults['counts'] = { matched: 0, failed: 0, missing: 0 }
   const rows = candidates.map(({ indexed }) => {
-    const result = evaluate(indexed, predicates, getValue)
+    const result = evaluate(indexed, predicates, logic, getValue)
     counts[result.status] += 1
     return result
   })

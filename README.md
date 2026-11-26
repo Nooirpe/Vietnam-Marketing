@@ -33,6 +33,8 @@ npm.cmd run preview
 
 Chạy lệnh cài Chromium lần đầu nếu máy chưa có trình duyệt phù hợp. Bộ kiểm thử E2E cũng hỗ trợ Chrome đã cài trên Windows. Vite tạo bản build trong `dist/`. Mở địa chỉ **Local** do lệnh preview in ra, mặc định là [http://localhost:4173/#/map](http://localhost:4173/#/map), để kiểm tra bản build.
 
+`npm test` chạy kiểm thử domain và component; `npm run test:e2e` chạy luồng trình duyệt Chromium, gồm kiểm tra axe trên bản đồ, hồ sơ, so sánh và chấm điểm. Hai workflow trong `.github/workflows/` chạy CI và triển khai GitHub Pages từ nhánh `main`.
+
 ### Cấu trúc dự án
 
 | Thư mục | Nội dung |
@@ -48,11 +50,36 @@ Chạy lệnh cài Chromium lần đầu nếu máy chưa có trình duyệt ph�
 - `public/data/v1-boundaries/` là bộ mặc định, hiển thị 34 tỉnh/thành theo mốc hành chính 01/07/2025. Có ranh giới cho ba phường Ba Đình, Hoàn Kiếm và Sài Gòn. Phạm vi tra cứu cấp xã hiện gồm ba phường này. Các chỉ tiêu thị trường và khảo sát là mô phỏng, chỉ có ở hai thành phố và ba phường mẫu.
 - `public/data/v1/` giữ nguyên bộ mẫu sơ đồ từ Mục 2. Chọn **Sơ đồ mẫu** trong mục **Hình học** hoặc mở `/#/map?snapshot=demo`. Cả hai bộ dùng cùng hợp đồng v1. Tệp ranh giới phường của bộ mặc định chỉ được tải khi vào tỉnh/thành tương ứng.
 
+### Nạp dữ liệu thị trường và khảo sát
+
+Chuẩn bị `market.csv` và `survey.csv` theo đúng danh mục trong `geo_units.json`, `indicators.json` và nguồn đã khai báo ở `manifest.json`. Mở CSV bằng trình soạn thảo văn bản hoặc đặt cột `adminCode` thành kiểu **Text** trong bảng tính để giữ số 0 đầu. Mã phải khớp chính xác với `geo_units.json.code`; không chuyển mã sang số.
+
+- `market.csv`: cột bắt buộc `adminCode,period,indicator,value,sourceId,status`; cột `reason` tùy chọn. Mỗi dòng là một chỉ tiêu thị trường. `period` có dạng `YYYY-Q1` đến `YYYY-Q4`; `indicator` phải là mã có `kind: "market"`. `value` là số không âm dùng dấu chấm thập phân. Giá trị trống chỉ hợp lệ với `status=unavailable`; có thể điền `reason`.
+- `survey.csv`: cột bắt buộc `adminCode,period,indicator,value,low,high,sourceId,status,n,method,segment,study`; `reason` tùy chọn. Mỗi nhóm `(adminCode,period,segment,study)` có đủ bốn dòng `unmet`, `online`, `offline`, `wtp`. Ba tỷ lệ dùng `value` trong khoảng 0–100 và online + offline phải bằng 100% (sai số tối đa 0,1 điểm); WTP dùng `low,high`, không dùng `value`. `n` là số mẫu dương và `method` là phương pháp khảo sát. Để biểu diễn nhóm chưa có bằng chứng, nhập dòng `status=unavailable` và để `value,low,high,n,method` trống.
+- `status` nhận `verified`, `estimated` hoặc `unavailable`. Không đưa số minh họa thành số liệu đã xác minh; dữ liệu ước tính phải gắn `estimated` và giữ `isDemo=true`.
+
+Chạy lệnh sau từ thư mục dự án. Trước khi nhập, thêm thông tin nguồn thật vào `manifest.sources`; sao lưu dữ liệu nếu cần giữ bộ hiện tại. Script kiểm tra các khóa trùng, mã địa bàn, mã chỉ tiêu, kỳ đo, nguồn và trạng thái. Nếu có lỗi, script liệt kê tệp/dòng và không ghi đầu ra. Khi thành công, thay thế hai tệp quan sát/khảo sát hiện tại bằng nội dung CSV và thêm các kỳ quý còn thiếu vào manifest.
+
+```powershell
+python scripts\import_data.py market.csv survey.csv --data-dir public\data\v1-boundaries
+```
+
+`isDemo` mặc định được đặt là `true`. Chỉ khi đã kiểm tra và xác nhận **mọi nguồn được khai báo** là thật, dùng `--real-source-id ID` cho từng nguồn; các ID/nhãn mô phỏng (ví dụ `SIM-M`, `SIM-S`) luôn giữ `isDemo=true`. Không đánh dấu nguồn là thật chỉ để ẩn huy hiệu. Khi có ít nhất hai kỳ có giá trị số, popup bản đồ và hồ sơ hiển thị sparkline; kỳ thiếu dữ liệu được giữ như khoảng trống, không nội suy.
+
+Kiểm thử script nhập CSV bằng:
+
+```powershell
+python -m unittest discover -s tests -p test_import_data.py
+```
+
 ## Thử luồng phân tích
 
 - Từ bản đồ chọn địa bàn và mở **Xem hồ sơ địa bàn**. Hồ sơ cho thấy bối cảnh thị trường, khảo sát Needs & Wants và nguồn theo kỳ.
 - Mở `/#/compare?areas=W00004,W00070,W26740` để so sánh ba phường mẫu. Dùng bộ chọn chỉ tiêu để đổi biểu đồ và bấm nhãn nguồn trong bảng để đọc chi tiết.
-- Mở `/#/decision?areas=P01,P79`, chọn **Tính điểm** với trọng số mặc định 60/40. TP. Hồ Chí Minh đạt 60 điểm mô phỏng, Hà Nội đạt 40 điểm. Khi đổi trọng số sang 30/70, hai điểm tương ứng là 30 và 70. Mở từng dòng để xem phép tính và tải CSV/JSON. Khi nhập CSV thành bảng, đặt cột `adminCode` ở kiểu văn bản để giữ số 0 đầu.
+- Mở `/#/decision?areas=P01,P79`, chọn **Tính điểm** với Min–Max v1 và trọng số mặc định 60/40. TP. Hồ Chí Minh đạt 60 điểm mô phỏng, Hà Nội đạt 40 điểm. Khi đổi trọng số sang 30/70, hai điểm tương ứng là 30 và 70. Mở từng dòng để xem phép tính và tải CSV/JSON.
+- Trong **Tiện ích**, chọn Tiếng Việt/English; lựa chọn được lưu trong trình duyệt và cập nhật `lang` trên tài liệu. Định dạng số và đơn vị cũng thay đổi theo ngôn ngữ.
+- Trang chấm điểm có preset ngành **Giao hàng tạp hóa**, **Cà phê / F&B** và **Dược phẩm bán lẻ**. Hai ngành mới dùng chỉ tiêu tổng quát có sẵn làm proxy và được ghi rõ trong giao diện; chúng không bổ sung hoặc giả lập số liệu chuyên ngành.
+- Chọn Min–Max v2 để chuẩn hóa theo tập ứng viên hoặc toàn bộ địa bàn cùng cấp. Có thể dùng tối đa sáu tiêu chí scalar, áp dụng preset trọng số, thêm ràng buộc cứng bằng ngưỡng tối thiểu/tối đa và xem phân tích độ nhạy ±10 điểm. Phiên bản thuật toán, phạm vi chuẩn hóa và ngành được ghi vào báo cáo. Khi nhập CSV thành bảng, đặt cột `adminCode` ở kiểu văn bản để giữ số 0 đầu.
 
 ## Đưa mã nguồn lên GitHub
 
@@ -85,7 +112,7 @@ npm.cmd ci
 npm.cmd run dev
 ```
 
-**Nếu muốn có link demo online**, có thể bật GitHub Pages và dùng GitHub Actions để chạy `npm ci`, `npm run build` và xuất bản `dist/`. URL demo của project site có dạng `https://YOUR_USERNAME.github.io/vietnam-market-intelligence/#/map`. [Hướng dẫn triển khai Vite lên GitHub Pages](https://vite.dev/guide/static-deploy.html#github-pages)
+**Link demo online:** workflow `Deploy to GitHub Pages` tự build và xuất bản `dist/` khi có push lên `main` hoặc chạy thủ công. Bật Pages trong Settings → Pages, chọn GitHub Actions làm nguồn triển khai. Vite tự đặt base path theo tên repository; ứng dụng dùng `HashRouter`, nên project site có dạng `https://YOUR_USERNAME.github.io/vietnam-market-intelligence/#/map`. [Hướng dẫn triển khai Vite lên GitHub Pages](https://vite.dev/guide/static-deploy.html#github-pages)
 
 ## Nguồn và giấy phép
 
@@ -98,7 +125,7 @@ Mã nguồn hiện chưa có tệp `LICENSE`. Nếu nhóm muốn cấp quyền s
 
 ### Dựng lại dữ liệu ranh giới
 
-Phần này dành cho người bảo trì dữ liệu. Chạy demo dùng các tệp GeoJSON đã đóng gói. Script `scripts/build_boundaries.py` cần Python với Shapely 2.1 và hai đầu vào đã đối chiếu ngày 26/11/2026. Tải tệp GeoJSON ZIP từ HDX và lưu dưới tên `cod-vnm.zip`. Với OSM, lưu phản hồi JSON từ truy vấn Overpass dưới tên `osm-2025.json`.
+Phần này dành cho người bảo trì dữ liệu. Chạy demo dùng các tệp GeoJSON đã đóng gói. Script `scripts/build_boundaries.py` cần Python với Shapely 2.1, tệp GeoJSON ZIP từ HDX (`cod-vnm.zip`), và phản hồi JSON từ Overpass (`osm-2025.json`). `scripts/ward_relations.csv` ánh xạ `relationId` OSM sang `geoId` phường trong `geo_units.json`.
 
 ```text
 [out:json][timeout:20][date:"2025-09-25T00:00:00Z"];rel(id:19260504,19331651,19331652);out geom;
@@ -109,4 +136,4 @@ Phần này dành cho người bảo trì dữ liệu. Chạy demo dùng các t�
 | `cod-vnm.zip` | `0a74e8ee18eb84b21f980fa4bd2a3135d2bc42fbd6e31450472368ff48abe41b` |
 | `osm-2025.json` | `59885ba3d27894d76ffe0b13b817307cdae35781b3253406b86aa772608d1359` |
 
-Chạy `python scripts/build_boundaries.py cod-vnm.zip osm-2025.json` để dựng lại bộ ranh giới. SHA-256 của phản hồi Overpass cũng phụ thuộc metadata của máy chủ.
+Để thêm phường ở tỉnh khác, chỉ thêm địa bàn đã có nguồn kiểm chứng vào `public/data/v1-boundaries/geo_units.json`, thêm ánh xạ `relationId,geoId` vào `scripts/ward_relations.csv`, rồi tải quan hệ OSM tương ứng vào phản hồi Overpass. Mã đơn vị phải là mã phường 5 chữ số, `parentId` phải là mã tỉnh trong danh mục. Không suy diễn hình học hoặc mã hành chính. Chạy `python scripts/build_boundaries.py cod-vnm.zip osm-2025.json`; script kiểm tra đủ quan hệ, tên phường và vị trí thuộc tỉnh, tạo `wards/Pxx.geojson` cho mỗi tỉnh có phường, rồi cập nhật `wardsByProvince`. Khi thư mục đích đã tồn tại, script giữ nguyên các tệp chỉ tiêu và khảo sát đã nạp. SHA-256 của phản hồi Overpass cũng phụ thuộc metadata của máy chủ.

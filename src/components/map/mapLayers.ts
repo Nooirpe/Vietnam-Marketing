@@ -1,19 +1,22 @@
 import type { GeometryCollection } from '../../types/snapshot'
+import type { Language } from '../../locales/I18nContext'
 
 export const mapLayers = [
-  { code: 'population', label: 'Dân số' },
-  { code: 'population_density', label: 'Mật độ dân số' },
-  { code: 'spending', label: 'Chi tiêu bình quân' },
-  { code: 'unmet', label: 'Nhu cầu chưa đáp ứng' },
-  { code: 'poi_density', label: 'Mật độ đối thủ' },
-  { code: 'off', label: 'Chỉ xem đường biên' },
+  { code: 'population', label: 'Dân số', labelKey: 'map.layerPopulation' },
+  { code: 'population_density', label: 'Mật độ dân số', labelKey: 'map.layerDensity' },
+  { code: 'spending', label: 'Chi tiêu bình quân', labelKey: 'map.layerSpending' },
+  { code: 'unmet', label: 'Nhu cầu chưa đáp ứng', labelKey: 'map.layerUnmet' },
+  { code: 'poi_density', label: 'Mật độ đối thủ', labelKey: 'map.layerCompetitors' },
+  { code: 'opportunity', label: 'Điểm cơ hội', labelKey: 'map.layerOpportunity' },
+  { code: 'off', label: 'Chỉ xem đường biên', labelKey: 'map.layerOff' },
 ] as const
 
 export type LayerCode = (typeof mapLayers)[number]['code']
 export type RegionFeature = GeometryCollection['features'][number]
 
-const numberFormat = new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 8 })
-const colors = ['#d1ebe6', '#8bc9bb', '#41998b', '#12625a']
+const sequentialColors = ['#ffffd9', '#a1dab4', '#41b6c4', '#225ea8']
+const unmetColors = ['#d73027', '#fee08b', '#91cf60', '#1a9850']
+const competitorColors = ['#1a9850', '#91cf60', '#fee08b', '#d73027']
 
 export interface LegendBin {
   lower: number
@@ -22,27 +25,31 @@ export interface LegendBin {
   color: string
 }
 
-export function formatValue(value: number) {
-  return numberFormat.format(value)
+export function formatValue(value: number, language: Language = 'vi') {
+  return new Intl.NumberFormat(language === 'en' ? 'en-US' : 'vi-VN', { maximumFractionDigits: 8 }).format(value)
 }
 
-const displayUnits: Record<string, string> = {
-  person: 'người',
-  'person/km2': 'người/km²',
-  'VND/person/month': 'đồng/người/tháng',
-  'VND/quarter': 'đồng/quý',
-  'store/km2': 'điểm bán/km²',
-  percent: '%',
-  'VND/delivery': 'đồng/lần giao',
+const displayUnits: Record<string, readonly [string, string]> = {
+  person: ['người', 'people'],
+  'person/km2': ['người/km²', 'people/km²'],
+  'VND/person/month': ['VND/người/tháng', 'VND/person/month'],
+  'VND/quarter': ['VND/quý', 'VND/quarter'],
+  'store/km2': ['điểm bán/km²', 'stores/km²'],
+  percent: ['%', '%'],
+  'VND/delivery': ['VND/lần giao', 'VND/delivery'],
+  score: ['điểm', 'points'],
 }
 
-export function formatUnit(unit: string | null) {
-  return unit ? displayUnits[unit] ?? unit : ''
+export function formatUnit(unit: string | null, language: Language = 'vi') {
+  return unit ? displayUnits[unit]?.[language === 'en' ? 1 : 0] ?? unit : ''
 }
 
 export function legendBins(layer: LayerCode, values: readonly number[]): LegendBin[] {
   if (layer === 'off' || values.length === 0) return []
-  const [min, max] = layer === 'unmet' ? [0, 100] : values.reduce(
+  const colors = layer === 'unmet'
+    ? unmetColors
+    : layer === 'poi_density' ? competitorColors : sequentialColors
+  const [min, max] = layer === 'unmet' || layer === 'opportunity' ? [0, 100] : values.reduce(
     ([low, high], value) => [Math.min(low, value), Math.max(high, value)],
     [Infinity, -Infinity],
   )
@@ -63,7 +70,7 @@ export function findBin(bins: readonly LegendBin[], value: number) {
   )
 }
 
-export function formatBin({ lower, upper, upperInclusive }: LegendBin) {
-  if (lower === upper) return formatValue(lower)
-  return `[${formatValue(lower)}, ${formatValue(upper)}${upperInclusive ? ']' : ')'}`
+export function formatBin({ lower, upper, upperInclusive }: LegendBin, language: Language = 'vi') {
+  if (lower === upper) return formatValue(lower, language)
+  return `[${formatValue(lower, language)}, ${formatValue(upper, language)}${upperInclusive ? ']' : ')'}`
 }
