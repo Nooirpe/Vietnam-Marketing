@@ -1,6 +1,11 @@
 .vmi-map {
-  background: #eef4f4;
+  background: var(--app-map);
   font-family: inherit;
+}
+
+.vmi-map-selecting,
+.vmi-map-selecting .leaflet-interactive {
+  cursor: crosshair;
 }
 
 .vmi-map .leaflet-popup-content {
@@ -8,10 +13,14 @@
 }
 
 .vmi-map .leaflet-interactive:focus-visible {
-  outline: 2px solid #0f766e;
+  outline: 3px solid var(--app-focus);
   outline-offset: 2px;
 }
 
 .vmi-missing-key {
-  background: repeating-linear-gradient(135deg, #e2e8f0 0 4px, #94a3b8 4px 5px);
+  background: repeating-linear-gradient(
+    135deg,
+    var(--app-map-missing) 0 4px,
+    var(--app-map-missing-line) 4px 5px
+  );
 }

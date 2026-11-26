@@ -1,8 +1,10 @@
-import { useEffect, useId, useMemo, type ReactNode } from 'react'
+import { useEffect, useId, useMemo, type ReactNode, type Ref } from 'react'
 import { geoJSON, Path, type LatLng, type PathOptions } from 'leaflet'
-import { GeoJSON, MapContainer, Popup, useMap } from 'react-leaflet'
+import { GeoJSON, MapContainer, Popup, useMap, useMapEvents } from 'react-leaflet'
 import type { GeometryCollection } from '../../types/snapshot'
 import type { RegionFeature } from './mapLayers'
+import { useReducedMotion } from '../ui/useReducedMotion'
+import { useT } from '../../locales/useT'
 import './map.css'
 
 interface GeometryViewportProps {
@@ -42,31 +44,55 @@ function GeometryViewport({ scopeKey, geometry }: GeometryViewportProps) {
 }
 
 interface MapCanvasProps extends GeometryViewportProps {
+  className?: string
+  captureRef?: Ref<HTMLDivElement>
   styleFeature: (feature: RegionFeature, hatch: string) => PathOptions
   onSelect: (id: string) => void
   selectedAreaId: string | null
   popup: ReactNode
+  selectingPoint: boolean
+  onSelectPoint: (latitude: number, longitude: number) => void
 }
 
-export function MapCanvas({ scopeKey, geometry, styleFeature, onSelect, selectedAreaId, popup }: MapCanvasProps) {
+function PointClickHandler({ active, onSelectPoint }: {
+  active: boolean
+  onSelectPoint: (latitude: number, longitude: number) => void
+}) {
+  useMapEvents({
+    click(event) {
+      if (active) onSelectPoint(event.latlng.lat, event.latlng.lng)
+    },
+  })
+  return null
+}
+
+export function MapCanvas({
+  className, captureRef, scopeKey, geometry, styleFeature, onSelect, selectedAreaId, popup,
+  selectingPoint, onSelectPoint,
+}: MapCanvasProps) {
+  const { t } = useT()
   const hatchId = `vmi-missing-${useId().replaceAll(':', '')}`
+  const reducedMotion = useReducedMotion()
   const anchor = useMemo(() => {
     const selected = geometry?.features.find(feature => feature.properties.geoId === selectedAreaId)
     return selected ? geoJSON(selected).getBounds().getCenter() : null
   }, [geometry, selectedAreaId])
 
   return (
-    <div role="region" aria-label="Bản đồ địa bàn" className="relative">
+    <div ref={captureRef} role="region" aria-label={t('map.title')}
+      className={`relative ${selectingPoint ? 'cursor-crosshair' : ''} ${className ?? ''}`}>
       <svg width="0" height="0" aria-hidden="true" className="absolute">
         <defs>
           <pattern id={hatchId} width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(35)">
-            <rect width="8" height="8" fill="#e2e8f0" />
-            <path d="M 0 0 L 0 8" stroke="#94a3b8" strokeWidth="2" />
+            <rect width="8" height="8" fill="var(--app-map-missing)" />
+            <path d="M 0 0 L 0 8" stroke="var(--app-map-missing-line)" strokeWidth="2" />
           </pattern>
         </defs>
       </svg>
       <MapContainer center={[16, 107]} zoom={5} maxZoom={17} preferCanvas={false}
-        className="vmi-map isolate h-[54vh] min-h-[340px] max-h-[720px] w-full">
+        zoomAnimation={!reducedMotion} fadeAnimation={!reducedMotion} markerZoomAnimation={!reducedMotion}
+        className={`vmi-map isolate h-[54vh] min-h-[340px] max-h-[720px] w-full ${selectingPoint ? 'vmi-map-selecting' : ''}`}>
+        <PointClickHandler active={selectingPoint} onSelectPoint={onSelectPoint} />
         <GeometryViewport scopeKey={scopeKey} geometry={geometry} />
         {geometry && (
           <GeoJSON
@@ -82,7 +108,7 @@ export function MapCanvas({ scopeKey, geometry, styleFeature, onSelect, selected
             eventHandlers={{
               click: (event) => {
                 const feature = event.propagatedFrom?.feature as RegionFeature | undefined
-                if (feature?.properties.geoId) onSelect(feature.properties.geoId)
+                if (!selectingPoint && feature?.properties.geoId) onSelect(feature.properties.geoId)
               },
             }}
           />

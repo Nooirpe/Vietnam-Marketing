@@ -1,12 +1,13 @@
-"""Build the boundary snapshot from the pinned COD-AB ZIP and OSM Overpass response.
+"""Build province and ward boundaries from COD-AB and mapped OSM relations.
 
 Usage: python scripts/build_boundaries.py cod-vnm.zip osm-2025.json
-Requires Shapely 2.1. The inputs are read-only. See README for source URLs.
+Requires Shapely 2.1. The inputs and scripts/ward_relations.csv are read-only.
 """
 from __future__ import annotations
 
+import argparse
+import csv
 import json
-import sys
 import zipfile
 from pathlib import Path
 
@@ -17,7 +18,7 @@ from shapely.ops import polygonize_full, unary_union
 
 DATA = Path(__file__).resolve().parents[1] / "public" / "data"
 PROVINCE_CODES = set("01 04 08 11 12 14 15 19 20 22 24 25 31 33 37 38 40 42 44 46 48 51 52 56 66 68 75 79 80 82 86 91 92 96".split())
-WARD_RELATIONS = {19331652: "W00004", 19331651: "W00070", 19260504: "W26740"}
+DEFAULT_WARD_RELATIONS = Path(__file__).with_name("ward_relations.csv")
 
 
 def write(path: Path, obj: object) -> None:
@@ -93,15 +94,44 @@ def ward_polygons(members, role):
     return list(outlines.geoms)
 
 
-def read_wards(path, units, provinces):
+def read_ward_relation_mapping(path, units):
+    by_id = {row["id"]: row for row in units}
+    relations = {}
+    geo_ids = set()
+    with path.open("r", encoding="utf-8-sig", newline="") as source:
+        reader = csv.DictReader(source)
+        if not {"relationId", "geoId"} <= set(reader.fieldnames or []):
+            raise ValueError(f"{path}: cần các cột relationId,geoId")
+        for line, row in enumerate(reader, start=2):
+            try:
+                relation_value = row.get("relationId") or ""
+                relation_id = int(relation_value.strip())
+            except (TypeError, ValueError):
+                raise ValueError(f"{path}:{line}: relationId phải là số nguyên") from None
+            geo_id = (row.get("geoId") or "").strip()
+            unit = by_id.get(geo_id)
+            if relation_id <= 0 or not unit or unit["level"] != "ward":
+                raise ValueError(f"{path}:{line}: quan hệ hoặc geoId phường không hợp lệ")
+            if relation_id in relations or geo_id in geo_ids:
+                raise ValueError(f"{path}:{line}: relationId hoặc geoId bị trùng")
+            relations[relation_id] = geo_id
+            geo_ids.add(geo_id)
+    if not relations:
+        raise ValueError(f"{path}: cần ít nhất một quan hệ OSM")
+    return relations
+
+
+def read_wards(path, relations, units, provinces):
     osm = json.loads(path.read_text(encoding="utf-8"))
-    if {row["id"] for row in osm["elements"]} != WARD_RELATIONS.keys():
-        raise ValueError("Missing sample ward relations")
+    if {row["id"] for row in osm["elements"]} != relations.keys():
+        raise ValueError("OSM response must contain exactly the mapped ward relations")
     province_shapes = {row["properties"]["geoId"]: shape(row["geometry"]) for row in provinces}
     results = {}
     for row in osm["elements"]:
-        geo_id = WARD_RELATIONS[row["id"]]
+        geo_id = relations[row["id"]]
         unit = units[geo_id]
+        if unit["parentId"] not in province_shapes:
+            raise ValueError(f"Unknown parent province for {geo_id}")
         tags = row["tags"]
         if tags["boundary"] != "administrative" or tags["name"] != unit["name"]:
             raise ValueError(f"Ward identity mismatch for {geo_id}")
@@ -115,23 +145,38 @@ def read_wards(path, units, provinces):
     return results
 
 
-def main():
-    cod_path, osm_path = map(Path, sys.argv[1:])
-    demo = DATA / "v1"
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("cod_zip", type=Path)
+    parser.add_argument("osm_json", type=Path)
+    parser.add_argument("--ward-relations", type=Path, default=DEFAULT_WARD_RELATIONS)
+    args = parser.parse_args(argv)
+
     output = DATA / "v1-boundaries"
-    manifest = json.loads((demo / "manifest.json").read_text(encoding="utf-8"))
-    sample_units = json.loads((demo / "geo_units.json").read_text(encoding="utf-8"))
+    source_dir = output if (output / "manifest.json").exists() else DATA / "v1"
+    manifest = json.loads((source_dir / "manifest.json").read_text(encoding="utf-8"))
+    sample_units = json.loads((source_dir / manifest["files"]["units"]).read_text(encoding="utf-8"))
     unit_lookup = {row["id"]: row for row in sample_units}
-    province_units, province_features = read_provinces(cod_path)
-    ward_features = read_wards(osm_path, unit_lookup, province_features)
+    relations = read_ward_relation_mapping(args.ward_relations, sample_units)
+    province_units, province_features = read_provinces(args.cod_zip)
+    ward_features = read_wards(args.osm_json, relations, unit_lookup, province_features)
+    province_lookup = {row["id"]: row for row in province_units}
+    output_units = [
+        next(row for row in sample_units if row["level"] == "country"),
+        *(unit_lookup.get(row["id"], row) for row in province_units),
+        *(row for row in sample_units if row["level"] == "ward"),
+    ]
+    if len({row["id"] for row in output_units}) != len(output_units):
+        raise ValueError("Duplicate administrative unit ids")
+    if any(row["parentId"] not in province_lookup for row in output_units if row["level"] == "ward"):
+        raise ValueError("Ward catalog contains a parent absent from COD-AB provinces")
     manifest.update(
-        datasetVersion="demo-2-boundaries",
         geometryMode="boundary",
         geometrySource={
             "label": "OCHA COD-AB v02 / OpenStreetMap",
             "locator": "https://data.humdata.org/dataset/cod-ab-vnm",
             "license": "Tỉnh: CC BY 3.0 IGO · Phường: ODbL 1.0",
-            "notes": "Địa giới 34 tỉnh từ OCHA ROAP/HDX, nguồn GSO, giản lược theo đường biên chung. Ba phường từ © OpenStreetMap contributors, truy vấn lịch sử 25/09/2025; chỉ dùng tham chiếu.",
+            "notes": f"Địa giới {len(province_features)} tỉnh từ OCHA ROAP/HDX, nguồn GSO, giản lược theo đường biên chung. {len(relations)} phường từ các quan hệ OSM được khai báo trong {args.ward_relations.name}; chỉ dùng tham chiếu.",
             "wardAttribution": {
                 "label": "© OpenStreetMap contributors · ODbL 1.0",
                 "locator": "https://www.openstreetmap.org/copyright",
@@ -139,16 +184,17 @@ def main():
         },
         coverage={"provinceCount": len(province_features), "wardCount": sum(map(len, ward_features.values()))},
     )
-    manifest["files"].pop("wards")
+    manifest["files"].pop("wards", None)
     manifest["files"]["wardsByProvince"] = {province: f"wards/{province}.geojson" for province in sorted(ward_features)}
     write(output / "manifest.json", manifest)
-    write(output / "geo_units.json", [sample_units[0], *(unit_lookup.get(row["id"], row) for row in province_units), *(row for row in sample_units if row["level"] == "ward")])
+    write(output / manifest["files"]["units"], output_units)
     write(output / "provinces.geojson", collection(province_features))
     for province, wards in ward_features.items():
         write(output / manifest["files"]["wardsByProvince"][province], collection(sorted(wards, key=lambda row: row["properties"]["geoId"])))
     for key in ("dictionary", "observations", "evidence"):
         file = manifest["files"][key]
-        (output / file).write_bytes((demo / file).read_bytes())
+        if source_dir != output:
+            (output / file).write_bytes((source_dir / file).read_bytes())
 
 
 if __name__ == "__main__":
