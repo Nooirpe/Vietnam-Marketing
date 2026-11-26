@@ -1,0 +1,7 @@
+[
+  {"geoId":"P01","period":"2025-Q3","segment":"urban_adults","study":"grocery_delivery_v1","sourceId":"SIM-S","status":"estimated","evidenceState":"available","method":"Mẫu thuận tiện mô phỏng, bảng hỏi v1","n":100,"answers":{"unmet":40,"online":60,"offline":40,"wtp":{"low":15000,"high":25000}}},
+  {"geoId":"P79","period":"2025-Q3","segment":"urban_adults","study":"grocery_delivery_v1","sourceId":"SIM-S","status":"estimated","evidenceState":"available","method":"Mẫu thuận tiện mô phỏng, bảng hỏi v1","n":100,"answers":{"unmet":60,"online":70,"offline":30,"wtp":{"low":20000,"high":30000}}},
+  {"geoId":"W00004","period":"2025-Q3","segment":"urban_adults","study":"grocery_delivery_v1","sourceId":"SIM-S","status":"estimated","evidenceState":"available","method":"Mẫu thuận tiện mô phỏng, bảng hỏi v1","n":40,"answers":{"unmet":50,"online":75,"offline":25,"wtp":{"low":15000,"high":20000}}},
+  {"geoId":"W00070","period":"2025-Q3","segment":"urban_adults","study":"grocery_delivery_v1","sourceId":"SIM-S","status":"estimated","evidenceState":"available","method":"Mẫu thuận tiện mô phỏng, bảng hỏi v1","n":40,"answers":{"unmet":25,"online":50,"offline":50,"wtp":{"low":12000,"high":18000}}},
+  {"geoId":"W26740","period":"2025-Q3","segment":"urban_adults","study":"grocery_delivery_v1","sourceId":"SIM-S","status":"unavailable","evidenceState":"no_evidence","method":null,"n":null,"answers":null,"reason":"Chưa có khảo sát cho địa bàn và phân khúc này"}
+]

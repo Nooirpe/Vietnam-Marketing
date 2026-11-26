@@ -1,0 +1,7 @@
+[
+  {"geoId":"P01","period":"2025-Q3","sourceId":"SIM-M","status":"estimated","values":{"population":9000000,"population_density":2700,"spending":4200000,"retail":150000000000,"poi_density":3},"missingReasons":{}},
+  {"geoId":"P79","period":"2025-Q3","sourceId":"SIM-M","status":"estimated","values":{"population":14000000,"population_density":2100,"spending":5100000,"retail":220000000000,"poi_density":5},"missingReasons":{}},
+  {"geoId":"W00004","period":"2025-Q3","sourceId":"SIM-M","status":"estimated","values":{"population":30000,"population_density":9000,"spending":4500000,"retail":700000000,"poi_density":2},"missingReasons":{}},
+  {"geoId":"W00070","period":"2025-Q3","sourceId":"SIM-M","status":"estimated","values":{"population":35000,"population_density":12000,"spending":4900000,"retail":800000000,"poi_density":4},"missingReasons":{}},
+  {"geoId":"W26740","period":"2025-Q3","sourceId":"SIM-M","status":"estimated","values":{"population":32000,"population_density":11000,"spending":null,"retail":750000000,"poi_density":0},"missingReasons":{"spending":"Chưa thu thập số liệu cấp phường"}}
+]

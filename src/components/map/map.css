@@ -1,0 +1,17 @@
+.vmi-map {
+  background: #eef4f4;
+  font-family: inherit;
+}
+
+.vmi-map .leaflet-popup-content {
+  margin: 16px;
+}
+
+.vmi-map .leaflet-interactive:focus-visible {
+  outline: 2px solid #0f766e;
+  outline-offset: 2px;
+}
+
+.vmi-missing-key {
+  background: repeating-linear-gradient(135deg, #e2e8f0 0 4px, #94a3b8 4px 5px);
+}

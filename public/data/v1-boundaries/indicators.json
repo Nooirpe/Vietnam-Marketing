@@ -1,0 +1,11 @@
+[
+  {"code":"population","name":"Dân số cuối kỳ","unit":"person","kind":"market","periodType":"quarter","sourceId":"SIM-M","status":"estimated"},
+  {"code":"population_density","name":"Mật độ dân số cuối kỳ","unit":"person/km2","kind":"market","periodType":"quarter","sourceId":"SIM-M","status":"estimated"},
+  {"code":"spending","name":"Chi tiêu bình quân tháng trong kỳ","unit":"VND/person/month","kind":"market","periodType":"quarter","sourceId":"SIM-M","status":"estimated"},
+  {"code":"retail","name":"Tổng doanh thu bán lẻ trong kỳ","unit":"VND/quarter","kind":"market","periodType":"quarter","sourceId":"SIM-M","status":"estimated"},
+  {"code":"poi_density","name":"Điểm bán tạp hóa cạnh tranh đang hoạt động cuối kỳ trên một km² diện tích địa bàn","unit":"store/km2","kind":"market","periodType":"quarter","sourceId":"SIM-M","status":"estimated"},
+  {"code":"unmet","name":"Tỷ lệ người còn nhu cầu giao hàng tạp hóa chưa được đáp ứng","unit":"percent","kind":"survey","periodType":"quarter","sourceId":"SIM-S","status":"estimated"},
+  {"code":"online","name":"Tỷ lệ ưu tiên mua online","unit":"percent","kind":"survey","periodType":"quarter","sourceId":"SIM-S","status":"estimated"},
+  {"code":"offline","name":"Tỷ lệ ưu tiên mua tại cửa hàng","unit":"percent","kind":"survey","periodType":"quarter","sourceId":"SIM-S","status":"estimated"},
+  {"code":"wtp","name":"Khoảng tứ phân vị phí sẵn lòng trả cho một lần giao","unit":"VND/delivery","kind":"survey","periodType":"quarter","sourceId":"SIM-S","status":"estimated"}
+]

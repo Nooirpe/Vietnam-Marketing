@@ -1,0 +1,8 @@
+[
+  {"id":"VN","level":"country","code":"VN","name":"Việt Nam","parentId":null,"aliases":[]},
+  {"id":"P01","level":"province","code":"01","name":"Thành phố Hà Nội","parentId":"VN","aliases":["HN"]},
+  {"id":"P79","level":"province","code":"79","name":"Thành phố Hồ Chí Minh","parentId":"VN","aliases":["TP.HCM","TPHCM"]},
+  {"id":"W00004","level":"ward","code":"00004","name":"Phường Ba Đình","parentId":"P01","aliases":[]},
+  {"id":"W00070","level":"ward","code":"00070","name":"Phường Hoàn Kiếm","parentId":"P01","aliases":[]},
+  {"id":"W26740","level":"ward","code":"26740","name":"Phường Sài Gòn","parentId":"P79","aliases":[]}
+]

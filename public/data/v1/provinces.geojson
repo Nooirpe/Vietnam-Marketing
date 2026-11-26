@@ -1,0 +1,4 @@
+{"type":"FeatureCollection","features":[
+  {"type":"Feature","properties":{"geoId":"P01"},"geometry":{"type":"Polygon","coordinates":[[[105.7,20.9],[106,20.9],[106,21.2],[105.7,21.2],[105.7,20.9]]]}},
+  {"type":"Feature","properties":{"geoId":"P79"},"geometry":{"type":"Polygon","coordinates":[[[106.5,10.6],[106.9,10.6],[106.9,11],[106.5,11],[106.5,10.6]]]}}
+]}

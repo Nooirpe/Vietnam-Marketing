@@ -1,0 +1,5 @@
+{"type":"FeatureCollection","features":[
+  {"type":"Feature","properties":{"geoId":"W00004"},"geometry":{"type":"Polygon","coordinates":[[[105.80,21.03],[105.83,21.03],[105.83,21.06],[105.80,21.06],[105.80,21.03]]]}},
+  {"type":"Feature","properties":{"geoId":"W00070"},"geometry":{"type":"Polygon","coordinates":[[[105.84,21.02],[105.86,21.02],[105.86,21.04],[105.84,21.04],[105.84,21.02]]]}},
+  {"type":"Feature","properties":{"geoId":"W26740"},"geometry":{"type":"Polygon","coordinates":[[[106.69,10.77],[106.72,10.77],[106.72,10.80],[106.69,10.80],[106.69,10.77]]]}}
+]}
